@@ -9,16 +9,31 @@
 """
 import json
 import os
+import ssl
 import sys
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 
+import certifi
+
 from faq import match_faq
 
 API_BASE = "https://platform-api2.max.ru"
 POLL_TIMEOUT = 30
+RUSSIAN_ROOT_CA = os.path.join(os.path.dirname(__file__), "russian_trusted_root_ca.pem")
+
+
+def _build_ssl_context() -> ssl.SSLContext:
+    # MAX использует сертификат от НУЦ Минцифры, которого нет в certifi/системном
+    # хранилище — доверяем обычным CA (certifi) плюс этому конкретному корню.
+    context = ssl.create_default_context(cafile=certifi.where())
+    context.load_verify_locations(cafile=RUSSIAN_ROOT_CA)
+    return context
+
+
+SSL_CONTEXT = _build_ssl_context()
 GREETING = (
     "Привет! Я отвечу на вопросы о трап-мосте РЫБОТЯГ: цена, характеристики, "
     "материал, как заказать и доставка, отзывы, инструкция. Просто спросите."
@@ -33,7 +48,7 @@ def api_request(method: str, path: str, token: str, params: dict = None, body: d
     req = urllib.request.Request(url, data=data, method=method)
     req.add_header("Authorization", token)
     req.add_header("Content-Type", "application/json")
-    with urllib.request.urlopen(req, timeout=POLL_TIMEOUT + 10) as resp:
+    with urllib.request.urlopen(req, timeout=POLL_TIMEOUT + 10, context=SSL_CONTEXT) as resp:
         return json.loads(resp.read().decode("utf-8"))
 
 
