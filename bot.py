@@ -22,6 +22,7 @@ from faq import match_faq
 
 API_BASE = "https://platform-api2.max.ru"
 POLL_TIMEOUT = 30
+BUILD_TAG = "tls-fix-2"  # бампаем при значимых изменениях — видно в логе, что деплой актуальный
 RUSSIAN_ROOT_CA = os.path.join(os.path.dirname(__file__), "russian_trusted_root_ca.pem")
 
 
@@ -90,7 +91,10 @@ def handle_update(token: str, update: dict):
 
 def run(token: str):
     marker = None
-    print("Бот запущен, жду сообщений...")
+    print(
+        f"Бот запущен ({BUILD_TAG}), жду сообщений... "
+        f"(CA файл: {RUSSIAN_ROOT_CA}, существует={os.path.exists(RUSSIAN_ROOT_CA)})"
+    )
     while True:
         try:
             params = {"timeout": POLL_TIMEOUT}
@@ -101,7 +105,10 @@ def run(token: str):
                 handle_update(token, update)
             marker = result.get("marker", marker)
         except (urllib.error.URLError, TimeoutError) as exc:
-            print(f"Сбой сети, повтор через 5с: {exc}", file=sys.stderr)
+            detail = ""
+            if isinstance(exc, urllib.error.URLError) and isinstance(exc.reason, ssl.SSLError):
+                detail = f" | verify_message={getattr(exc.reason, 'verify_message', None)}"
+            print(f"Сбой сети, повтор через 5с: {exc}{detail}", file=sys.stderr)
             time.sleep(5)
         except Exception as exc:  # noqa: BLE001 - бот не должен падать из-за одного плохого апдейта
             print(f"Ошибка обработки: {exc}", file=sys.stderr)
